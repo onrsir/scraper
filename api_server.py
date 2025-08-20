@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from flask import Flask, jsonify, request
-import os
 import json
 import datetime
+import os
 import logging
-from predictz_scraper import PredictzScraper
+import requests
+from bs4 import BeautifulSoup
+from predictz_scraper import PredictzScraper, Match
 
 # Log yapılandırması
 logging.basicConfig(
@@ -16,83 +17,95 @@ logging.basicConfig(
 )
 logger = logging.getLogger('predictz_api')
 
-app = Flask(__name__)
-
 # Veri dosyasının yolu
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def get_latest_data_file():
-    """En son oluşturulan JSON veri dosyasını bul"""
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    json_file = os.path.join(DATA_DIR, f"predictz_matches_{today}.json")
-    
-    # Eğer bugünün dosyası yoksa, scraper'ı çalıştır
-    if not os.path.exists(json_file):
-        logger.info(f"Bugünün veri dosyası bulunamadı. Scraper çalıştırılıyor...")
-        scraper = PredictzScraper()
-        matches = scraper.scrape()
-        if matches:
-            json_file = scraper.save_to_json()
-            logger.info(f"Yeni veri dosyası oluşturuldu: {json_file}")
-        else:
-            logger.error("Veri çekilemedi!")
-            return None
-    
-    return json_file
-
-def load_data():
-    """En son veri dosyasını yükle"""
-    json_file = get_latest_data_file()
-    if not json_file or not os.path.exists(json_file):
-        logger.error(f"Veri dosyası bulunamadı: {json_file}")
-        return []
+def get_league_names():
+    """Predictz.com sitesinden lig isimlerini çeker"""
+    url = "https://www.predictz.com/predictions/tomorrow/"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
     
     try:
-        with open(json_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        return data
+        logger.info(f"Lig isimleri çekiliyor: {url}")
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Lig başlıklarını bul
+        league_headers = soup.find_all('div', class_='pttrnh ptttl')
+        
+        leagues = []
+        for header in league_headers:
+            # Lig adını <h2><a> etiketinden al
+            h2_tag = header.find('h2')
+            if h2_tag and h2_tag.find('a'):
+                league_name = h2_tag.find('a').text.strip()
+                leagues.append(league_name)
+                logger.info(f"Lig bulundu: {league_name}")
+        
+        return leagues
+    
     except Exception as e:
-        logger.error(f"Veri dosyası yüklenirken hata: {e}")
+        logger.error(f"Lig isimleri çekilirken hata oluştu: {e}")
         return []
 
-@app.route('/')
-def index():
-    """Ana sayfa"""
-    return "Predictz API - Kullanılabilir endpointler: /api/matches, /api/matches/<league>, /api/leagues, /api/refresh"
-
-@app.route('/api/matches', methods=['GET'])
-def get_matches():
-    """Tüm maçları getir"""
-    data = load_data()
-    return jsonify(data)
-
-@app.route('/api/matches/<league>', methods=['GET'])
-def get_matches_by_league(league):
-    """Belirli bir lige ait maçları getir"""
-    data = load_data()
-    filtered_data = [match for match in data if match['league'].lower() == league.lower()]
-    return jsonify(filtered_data)
-
-@app.route('/api/leagues', methods=['GET'])
-def get_leagues():
-    """Mevcut tüm ligleri getir"""
-    data = load_data()
-    leagues = list(set(match['league'] for match in data))
-    return jsonify(leagues)
-
-@app.route('/api/refresh', methods=['GET'])
-def refresh_data():
-    """Verileri yenile"""
-    scraper = PredictzScraper()
-    matches = scraper.scrape()
+def create_json_file():
+    """Predictz.com sitesinden veri çekip JSON dosyasına kaydeder"""
+    logger.info("Veri çekme işlemi başlatılıyor...")
     
-    if matches:
-        json_file = scraper.save_to_json()
-        logger.info(f"Veriler yenilendi: {json_file}")
-        return jsonify({"status": "success", "message": f"Veriler yenilendi: {len(matches)} maç"})
-    else:
-        return jsonify({"status": "error", "message": "Veri çekilemedi!"})
+    try:
+        # Önce lig isimlerini al
+        leagues = get_league_names()
+        if not leagues:
+            logger.warning("Lig isimleri çekilemedi!")
+        else:
+            logger.info(f"Toplam {len(leagues)} lig bulundu: {', '.join(leagues)}")
+        
+        # Scraper'ı başlat
+        scraper = PredictzScraper()
+        matches = scraper.scrape()
+        
+        if not matches:
+            logger.error("Veri çekilemedi!")
+            return None
+        
+        # Bugünün tarihini al
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        # Dosya adını oluştur
+        json_file = os.path.join(DATA_DIR, f"predictz_matches_{today}.json")
+        
+        # Maç nesnelerini sözlüklere dönüştür
+        matches_dict = []
+        for match in matches:
+            match_dict = {
+                "date": match.date,
+                "home_team": match.home_team,
+                "away_team": match.away_team,
+                "league": match.league,  # Lig ismi eklenmiş hali
+                "prediction": match.prediction
+            }
+            matches_dict.append(match_dict)
+        
+        # JSON dosyasına kaydet
+        with open(json_file, 'w', encoding='utf-8') as f:
+            json.dump(matches_dict, f, ensure_ascii=False, indent=4)
+        
+        logger.info(f"Veriler {json_file} dosyasına kaydedildi. Toplam {len(matches)} maç.")
+        return json_file
+    
+    except Exception as e:
+        logger.error(f"İşlem sırasında hata oluştu: {e}")
+        return None
 
 if __name__ == '__main__':
-    # API sunucusunu başlat
-    app.run(host='0.0.0.0', port=5000) 
+    # JSON dosyası oluştur
+    result = create_json_file()
+    
+    if result:
+        logger.info("İşlem başarıyla tamamlandı.")
+    else:
+        logger.error("İşlem başarısız oldu.") 
