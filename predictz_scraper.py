@@ -8,6 +8,7 @@ import datetime
 import os
 import logging
 import json
+import re
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 
@@ -70,7 +71,12 @@ class PredictzScraper:
                     continue
                     
                 league_name_elem = league_header.find('h2')
-                league_name = league_name_elem.text.strip() if league_name_elem else "Unknown League"
+                if not league_name_elem or not league_name_elem.find('a'):
+                    continue
+                
+                # Lig adını <a> etiketinden al
+                league_name = league_name_elem.find('a').text.strip()
+                logger.info(f"Lig bulundu: {league_name}")
                 
                 # Maç satırlarını bul
                 match_rows = section.find_all('div', class_='pttr ptcnt')
@@ -154,7 +160,7 @@ class PredictzScraper:
                             prediction=prediction
                         )
                         matches.append(match)
-                        logger.debug(f"Maç eklendi: {home_team} vs {away_team}")
+                        logger.debug(f"Maç eklendi: {home_team} vs {away_team} ({league_name})")
                     except Exception as e:
                         logger.error(f"Maç satırı işlenirken hata: {e}")
                         continue
