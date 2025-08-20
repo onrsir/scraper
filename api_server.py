@@ -55,6 +55,11 @@ def load_data():
         logger.error(f"Veri dosyası yüklenirken hata: {e}")
         return []
 
+@app.route('/')
+def index():
+    """Ana sayfa"""
+    return "Predictz API - Kullanılabilir endpointler: /api/matches, /api/matches/<league>, /api/leagues, /api/refresh"
+
 @app.route('/api/matches', methods=['GET'])
 def get_matches():
     """Tüm maçları getir"""
@@ -90,4 +95,4 @@ def refresh_data():
 
 if __name__ == '__main__':
     # API sunucusunu başlat
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(host='0.0.0.0', port=5000) 
