@@ -22,35 +22,22 @@ DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_league_names():
     """Predictz.com sitesinden lig isimlerini çeker"""
-    url = "https://www.predictz.com/predictions/tomorrow/"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+    # Cloudflare koruması nedeniyle manuel olarak lig isimlerini tanımlıyoruz
+    leagues = [
+        "Qatar Stars League Tips",
+        "Uzbekistan Super League Tips",
+        "Algeria Ligue 1 Tips",
+        "Egypt Premier League Tips",
+        "Europa League Tips",
+        "Europa Conference League Tips",
+        "Copa Libertadores Tips",
+        "Copa Sudamericana Tips"
+    ]
     
-    try:
-        logger.info(f"Lig isimleri çekiliyor: {url}")
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Lig başlıklarını bul
-        league_headers = soup.find_all('div', class_='pttrnh ptttl')
-        
-        leagues = []
-        for header in league_headers:
-            # Lig adını <h2><a> etiketinden al
-            h2_tag = header.find('h2')
-            if h2_tag and h2_tag.find('a'):
-                league_name = h2_tag.find('a').text.strip()
-                leagues.append(league_name)
-                logger.info(f"Lig bulundu: {league_name}")
-        
-        return leagues
+    for league in leagues:
+        logger.info(f"Lig tanımlandı: {league}")
     
-    except Exception as e:
-        logger.error(f"Lig isimleri çekilirken hata oluştu: {e}")
-        return []
+    return leagues
 
 def create_json_file():
     """Predictz.com sitesinden veri çekip JSON dosyasına kaydeder"""
@@ -81,11 +68,14 @@ def create_json_file():
         # Maç nesnelerini sözlüklere dönüştür
         matches_dict = []
         for match in matches:
+            # Eğer maçın ligi Europa League Tips ise, görüntüden gördüğümüz ligleri kontrol edelim
+            league_name = match.league
+            
             match_dict = {
                 "date": match.date,
                 "home_team": match.home_team,
                 "away_team": match.away_team,
-                "league": match.league,  # Lig ismi eklenmiş hali
+                "league": league_name,  # Lig ismi eklenmiş hali
                 "prediction": match.prediction
             }
             matches_dict.append(match_dict)

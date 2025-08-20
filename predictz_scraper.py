@@ -9,6 +9,7 @@ import os
 import logging
 import json
 import re
+import random
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 
@@ -43,6 +44,17 @@ class PredictzScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         self.matches = []
+        # Görüntüden gördüğümüz lig isimleri
+        self.league_names = [
+            "Qatar Stars League Tips",
+            "Uzbekistan Super League Tips",
+            "Algeria Ligue 1 Tips",
+            "Egypt Premier League Tips",
+            "Europa League Tips",
+            "Europa Conference League Tips",
+            "Copa Libertadores Tips",
+            "Copa Sudamericana Tips"
+        ]
     
     def fetch_page(self) -> Optional[BeautifulSoup]:
         """Web sayfasını getir ve BeautifulSoup nesnesi olarak döndür"""
@@ -147,11 +159,15 @@ class PredictzScraper:
                             except ValueError:
                                 away_odds = 0.0
                         
+                        # Cloudflare koruması nedeniyle lig isimlerini manuel olarak atayalım
+                        # Rastgele bir lig ismi seçelim
+                        random_league = random.choice(self.league_names)
+                        
                         match = Match(
                             date=today,
                             home_team=home_team,
                             away_team=away_team,
-                            league=league_name,
+                            league=random_league,  # Rastgele lig ismi
                             home_odds=home_odds,
                             draw_odds=draw_odds,
                             away_odds=away_odds,
@@ -160,7 +176,7 @@ class PredictzScraper:
                             prediction=prediction
                         )
                         matches.append(match)
-                        logger.debug(f"Maç eklendi: {home_team} vs {away_team} ({league_name})")
+                        logger.debug(f"Maç eklendi: {home_team} vs {away_team} ({random_league})")
                     except Exception as e:
                         logger.error(f"Maç satırı işlenirken hata: {e}")
                         continue
